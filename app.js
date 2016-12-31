@@ -99,7 +99,7 @@ var sendNewsResult = function (err, news) {
 
 
 //simple variable passing to client
-app.get("/getvar", function(req, res){
-    res.json({ name: "example" });
+app.get("/getSocketUrl", function(req, res){
+    res.json({ url: appEnv.url });
 });
 

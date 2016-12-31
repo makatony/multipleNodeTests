@@ -1,9 +1,7 @@
-
-
+var socket;
 
 
 $(function () {
-	
 
 	$("<input>", { type: "text", val: 'Logitech', id: 'queryString' }).appendTo($('body'));
 	$("<input>", { type: "submit" }).bind("click", getNews).appendTo($('body'));
@@ -18,19 +16,24 @@ $(function () {
 // #### SOCKETS: I/O ####
 // ######################
 
-var socket = io.connect('http://localhost:6001');
 
-socket.on("getNewsResult", function (data) { 
-	result = data;
-	console.log(JSON.stringify(result,null,4));
-	$("<p>",{ text:JSON.stringify(result,null,4)}).appendTo($('body'))
+$.get("/getSocketUrl", function (dat) {
+	var url = dat.url;
+	console.log(JSON.stringify(dat,null,4));
+	
+	socket = io.connect(url);
+	
+	socket.on("getNewsResult", function (data) { 
+		result = data;
+		console.log(JSON.stringify(result,null,4));
+		$("<p>",{ text:JSON.stringify(result,null,4)}).appendTo($('body'))
+	});
+	
 });
 
 var getNews = function () {
 	socket.emit("getNews", { queryString: $('#queryString').val() });
 }
-
-
 
 
 
@@ -40,10 +43,9 @@ var getNews = function () {
 
 
 //simple variable passing between client and server without client ID
-$.get("/getvar", function (data) {
-	name = data.name;
-	console.log(name);
-});
+// $.get("/getvar", function (data) {
+	// console.log(JSON.stringify(data,null,4));
+// });
 
 
 
