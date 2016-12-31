@@ -89,7 +89,10 @@ var sendNewsResult = function (err, news) {
 	io.sockets.connected[params.clientID].emit("getNewsResult",{ result: result } );
 }
 
-
+// this is the only way i found to tell the client the website URL without PHP
+app.get("/getSocketUrl", function(req, res){
+    res.json({ url: appEnv.url });
+});
 
 
 
@@ -98,8 +101,5 @@ var sendNewsResult = function (err, news) {
 // #######################
 
 
-//simple variable passing to client
-app.get("/getSocketUrl", function(req, res){
-    res.json({ url: appEnv.url });
-});
+
 

@@ -16,7 +16,6 @@ $(function () {
 // #### SOCKETS: I/O ####
 // ######################
 
-
 $.get("/getSocketUrl", function (dat) {
 	var url = dat.url;
 	console.log(JSON.stringify(dat,null,4));

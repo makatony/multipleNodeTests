@@ -78,7 +78,7 @@ var mouseOverEvent = function () {
 // ########################
 
 var preloadRandomText = function() {
-	var url = 'http://www.randomtext.me/api/'; //this API doesnt support JSONP
+	var url = 'https://www.randomtext.me/api/'; //this API doesnt support JSONP
 	randomText = loadJSON(url,loadCallback,loadErrorCallback,"json");
 }
 var setupRandomText = function() {
