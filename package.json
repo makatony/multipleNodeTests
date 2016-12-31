@@ -1,0 +1,28 @@
+{
+  "name": "jsdomandapicalltest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node app.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/makatony/jsDOMandAPIcalltest.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/makatony/jsDOMandAPIcalltest/issues"
+  },
+  "homepage": "https://github.com/makatony/jsDOMandAPIcalltest#readme",
+  "dependencies": {
+    "cfenv": "^1.0.3",
+    "express": "^4.14.0"
+  },
+  "engines": {
+    "node": "4.x"
+  }
+}

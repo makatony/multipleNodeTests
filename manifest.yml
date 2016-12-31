@@ -1,0 +1,12 @@
+applications:
+- path: .
+  memory: 256M
+  instances: 1
+  domain: eu-gb.mybluemix.net
+  name: makatonyApp1Node
+  host: makatonyApp1Node
+  disk_quota: 1024M
+  services:
+  - AlchemyAPI-g9
+  - Natural Language Classifier-ii
+  - availability-monitoring-auto
