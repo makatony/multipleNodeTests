@@ -20,7 +20,9 @@
   "homepage": "https://github.com/makatony/jsDOMandAPIcalltest#readme",
   "dependencies": {
     "cfenv": "^1.0.3",
-    "express": "^4.14.0"
+    "dotenv": "^2.0.0",
+    "express": "^4.14.0",
+    "socket.io": "^1.7.2"
   },
   "engines": {
     "node": "4.x"
