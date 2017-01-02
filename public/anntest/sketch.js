@@ -3,18 +3,82 @@ var NeuronRadius = 25;
 var focusNeuron;
 var thisPrevNeuron;
 var allNeuronsInOriginalPosition = true;
+var xTraining = '[[3,5],[5,1],[10,2]]';
+var yExpected = '[0.75,0.82,0.93]';
 
 function setup() {
-	createP("try in console:");	
-	createElement('code','xTraining = [[3,5],[5,1],[10,2]]; y = [0.75,0.82,0.93]; yHat=network.fwdPropagation(xTraining); console.log(prtMatrix(yHat,"\n",","));');	
 	
 	createCanvas(600, 300);
-	createP('LayerNb: ').id('neuronNetworkPosLayer').child(createElement('span','N/A').id('neuronNetworkPosLayerNb'));
-	createP('NeuronNb: ').id('neuronNetworkPosNeuron').child(createElement('span','N/A').id('neuronNetworkPosNeuronNb'));
-	createP('Value: ').id('neuronVal').child(createElement('span','N/A').id('neuronValue'));
-	button = createButton('Reset Visualization').mousePressed(function () {
-			allNeuronsInOriginalPosition = false;
-		});
+	
+	
+	resetViz = createButton('Reset Visualization').mousePressed(function () {
+		allNeuronsInOriginalPosition = false;
+	});
+	
+	
+	
+	fwdPropBtn = createButton('Forward Propagation').mousePressed(function () {
+		xTraining = JSON.parse(select('#xTraining').value()); 
+		network.y = JSON.parse(select('#yExpected').value()); 
+		network.fwdPropagation(xTraining); 
+		
+		var currentdate = new Date();
+		var dateString = "["+currentdate.getHours() + ":" + currentdate.getMinutes() + ":" + currentdate.getSeconds()+"] ";
+		var textareaString = dateString;
+		textareaString += "Forward propagation (testing) result below | Mean Squared Error: "+network.calculateCost()+"\n";
+		textareaString += network.yHat; 
+		// textareaString += prtMatrix(network.yHat,"\n",","); 
+		
+		select('#annConsole').html(textareaString+"\n"+select('#annConsole').value())
+	});
+	
+	
+	
+	backPropBtn = createButton('Back Propagation').mousePressed(function () {
+		
+		result = network.backPropagation();
+		
+		var currentdate = new Date();
+		var dateString = "["+currentdate.getHours() + ":" + currentdate.getMinutes() + ":" + currentdate.getSeconds()+"] ";
+		var textareaString = dateString;
+		if (result == "error") textareaString += "Back propagation: Error returned";
+		else textareaString += "Back propagation (learning) status: weights were updated";
+		select('#annConsole').html(textareaString+"\n"+select('#annConsole').value())
+	});
+	
+	
+	vizInfo = createDiv('').id('vizInfo').style('padding','10px')
+		.child(
+			createElement('table').child(
+				createElement('tr')
+					.child(createElement('td').child(createP('LayerNb: ').id('neuronNetworkPosLayer').child(createElement('span','N/A').id('neuronNetworkPosLayerNb'))))
+					.child(createElement('td').child(createP('NeuronNb: ').id('neuronNetworkPosNeuron').child(createElement('span','N/A').id('neuronNetworkPosNeuronNb'))))
+					.child(createElement('td').child(createP('Activity: ').id('neuronAct').child(createElement('span','N/A').id('neuronActivity'))))
+			).style('width','100%')		
+		
+		);
+		
+
+	vizInfo.child(resetViz);
+	createP('');
+
+	createP('Forward Propagation (testing values): <br>').id('fwdProp').style('padding','10px')
+		.child(createInput(xTraining).id('xTraining'))
+		.child(fwdPropBtn);
+	createP('Back Propagation (expected values): <br>').id('backProp').style('padding','10px')
+		.child(createInput(yExpected).id('yExpected'))
+		.child(backPropBtn);
+	
+	annParams = createDiv('').id('annParams').child(
+		createElement('table').child(
+			createElement('tr')
+				.child(createElement('td').child(fwdProp))
+				.child(createElement('td').child(backProp))
+		).style('width','100%')
+	).child(
+		createElement('textarea').id('annConsole').style('width','100%').style('height','100px')
+	);
+	
 
 	network = new Network();
 	network.generateNetwork(networkArch);
@@ -54,6 +118,7 @@ function setup() {
 
 function draw() {
 	background(0);
+	
 
 	if (!allNeuronsInOriginalPosition)
 		moveToOriginalPos();
@@ -71,7 +136,7 @@ function draw() {
 				fill(255); focusNeuron = thisNeuron;
 				select('#neuronNetworkPosLayerNb').html(thisNeuron.viz.networkPos.layerNb);
 				select('#neuronNetworkPosNeuronNb').html(thisNeuron.viz.networkPos.neuronNb);
-				select('#neuronValue').html(thisNeuron.getValuesVector());
+				select('#neuronActivity').html(thisNeuron.getActivitiesVector());
 			}
 			if ((!thisNeuron.viz.intersectsMouse()) && (focusNeuron == thisNeuron)) {
 				focusNeuron = "";
@@ -103,6 +168,25 @@ function draw() {
 			}
 		}
 	}
+	
+	
+	
+	// functions
+
+	stroke(255);
+	var xMin = -5;
+	var xMax = 5;
+	var yMin = 0;
+	var yMax = 1;
+	var sigYval = 0;
+	for (var i = 0; i <= width; i++) {
+		sigXval = map(i,0,width,xMin,xMax);
+		// sigYval = sigmoidFn(sigXval);
+		// sigYval = sigmoidPrimeFn(sigXval);
+		Yvalue =  map(sigYval,yMin,yMax,height,0)
+		point(i,Yvalue);
+	}
+	
 }
 
 function moveToOriginalPos() {
