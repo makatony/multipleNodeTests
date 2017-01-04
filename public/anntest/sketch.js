@@ -1,4 +1,4 @@
-var networkArch = [2, 3, 1];
+var networkArch = "[2, 3, 1]";
 var NeuronRadius = 25;
 var focusNeuron;
 var thisPrevNeuron;
@@ -9,6 +9,9 @@ var yExpected = '[0.75,0.82,0.93]';
 function setup() {
 	
 	createCanvas(600, 300);
+	
+	
+	setArchitectureBtn = createButton('Set new architecture').mousePressed(setArchitecture);
 	
 	
 	resetViz = createButton('Reset Visualization').mousePressed(function () {
@@ -25,8 +28,8 @@ function setup() {
 		var currentdate = new Date();
 		var dateString = "["+currentdate.getHours() + ":" + currentdate.getMinutes() + ":" + currentdate.getSeconds()+"] ";
 		var textareaString = dateString;
-		textareaString += "Forward propagation (testing) result below | Mean Squared Error: "+network.calculateCost()+"\n";
-		textareaString += network.yHat; 
+		textareaString += "Forward propagation result below | Mean Squared Error: "+network.calculateCost()+"\n";
+		textareaString += prtMatrix(network.yHat,"\n",","); 
 		// textareaString += prtMatrix(network.yHat,"\n",","); 
 		
 		select('#annConsole').html(textareaString+"\n"+select('#annConsole').value())
@@ -42,7 +45,7 @@ function setup() {
 		var dateString = "["+currentdate.getHours() + ":" + currentdate.getMinutes() + ":" + currentdate.getSeconds()+"] ";
 		var textareaString = dateString;
 		if (result == "error") textareaString += "Back propagation: Error returned";
-		else textareaString += "Back propagation (learning) status: weights were updated";
+		else textareaString += "Back propagation status: weights were updated";
 		select('#annConsole').html(textareaString+"\n"+select('#annConsole').value())
 	});
 	
@@ -50,23 +53,35 @@ function setup() {
 	vizInfo = createDiv('').id('vizInfo').style('padding','10px')
 		.child(
 			createElement('table').child(
-				createElement('tr')
-					.child(createElement('td').child(createP('LayerNb: ').id('neuronNetworkPosLayer').child(createElement('span','N/A').id('neuronNetworkPosLayerNb'))))
-					.child(createElement('td').child(createP('NeuronNb: ').id('neuronNetworkPosNeuron').child(createElement('span','N/A').id('neuronNetworkPosNeuronNb'))))
-					.child(createElement('td').child(createP('Activity: ').id('neuronAct').child(createElement('span','N/A').id('neuronActivity'))))
+				createElement('tr').child(
+					createElement('td')
+							.child(createP('Network Architecture: <br>').id('netArch').style('padding','10px'))
+							.child(createInput(networkArch).id('networkArch'))
+							.child(setArchitectureBtn).style('border','1px solid')
+							.style('width','40%')
+				).child(
+					createElement('td')
+						.child(createP('LayerNb: ').id('neuronNetworkPosLayer').child(createElement('span','N/A').id('neuronNetworkPosLayerNb')))
+						.child(createP('NeuronNb: ').id('neuronNetworkPosNeuron').child(createElement('span','N/A').id('neuronNetworkPosNeuronNb')))
+						.child(createP('Activity: ').id('neuronAct').child(createElement('span','N/A').id('neuronActivity')))
+						.child(resetViz).style('border','1px solid')
+				)
 			).style('width','100%')		
 		
 		);
 		
-
-	vizInfo.child(resetViz);
+		
 	createP('');
 
-	createP('Forward Propagation (testing values): <br>').id('fwdProp').style('padding','10px')
-		.child(createInput(xTraining).id('xTraining'))
+	createP('Forward Propagation : <br>').id('fwdProp').style('padding','10px')
+		.child(createP('testing values: ')
+			.child(createInput(xTraining).id('xTraining'))
+		)
+		.child(createP('expected values: ')
+			.child(createInput(yExpected).id('yExpected'))
+		)			
 		.child(fwdPropBtn);
-	createP('Back Propagation (expected values): <br>').id('backProp').style('padding','10px')
-		.child(createInput(yExpected).id('yExpected'))
+	createP('Back Propagation : <br>').id('backProp').style('padding','10px')
 		.child(backPropBtn);
 	
 	annParams = createDiv('').id('annParams').child(
@@ -79,46 +94,15 @@ function setup() {
 		createElement('textarea').id('annConsole').style('width','100%').style('height','100px')
 	);
 	
-
-	network = new Network();
-	network.generateNetwork(networkArch);
-
-	//initializing neuron positions and adding new properties to the neuron object
-	var Xsegmentation = width / network.layers.length;
-	var Xoffset = Xsegmentation / 2
-
-		for (var i = 0; i < network.layers.length; i++) {
-			var thisLayer = network.layers[i];
-			var x = Xoffset + Xsegmentation * i;
-
-			var Ysegmentation = height / thisLayer.neurons.length;
-			var Yoffset = Ysegmentation / 2
-
-				for (var j = 0; j < thisLayer.neurons.length; j++) {
-					var thisNeuron = thisLayer.neurons[j];
-					var y = Yoffset + Ysegmentation * j;
-
-					//adds visualization properties to the neurons:
-					thisNeuron.viz = {};
-					thisNeuron.viz.pos = createVector(x, y);
-					thisNeuron.viz.originalPos = createVector(x, y);
-					thisNeuron.viz.networkPos = {
-						layerNb: i,
-						neuronNb: j
-					};
-					thisNeuron.viz.intersectsMouse = function () {
-						return (this.pos.dist(createVector(mouseX, mouseY)) < NeuronRadius);
-					} //here it is without .viz because the function is inside .viz already
-
-
-				}
-		}
+	
+	setArchitecture();
 
 }
 
 function draw() {
 	background(0);
 	
+	if (!network.layers[0].neurons[0].viz) return;
 
 	if (!allNeuronsInOriginalPosition)
 		moveToOriginalPos();
@@ -168,8 +152,7 @@ function draw() {
 			}
 		}
 	}
-	
-	
+
 	
 	// functions
 
@@ -188,6 +171,51 @@ function draw() {
 	}
 	
 }
+
+var setArchitecture = function() {
+	network = new Network();
+	network.viz = {};
+	network.viz.initNeuronPositions = initNeuronPositions;
+	
+	networkArch = JSON.parse(select('#networkArch').value());
+	network.generateNetwork(networkArch);
+	network.viz.initNeuronPositions();
+	select('#annConsole').html("")
+}
+
+var initNeuronPositions = function () {
+	//initializing neuron positions and adding new properties to the neuron object
+	var Xsegmentation = width / network.layers.length;
+	var Xoffset = Xsegmentation / 2
+
+	for (var i = 0; i < network.layers.length; i++) {
+		var thisLayer = network.layers[i];
+		var x = Xoffset + Xsegmentation * i;
+
+		var Ysegmentation = height / thisLayer.neurons.length;
+		var Yoffset = Ysegmentation / 2
+
+		for (var j = 0; j < thisLayer.neurons.length; j++) {
+			var thisNeuron = thisLayer.neurons[j];
+			var y = Yoffset + Ysegmentation * j;
+
+			//adds visualization properties to the neurons:
+			thisNeuron.viz = {};
+			thisNeuron.viz.pos = createVector(x, y);
+			thisNeuron.viz.originalPos = createVector(x, y);
+			thisNeuron.viz.networkPos = {
+				layerNb: i,
+				neuronNb: j
+			};
+			thisNeuron.viz.intersectsMouse = function () {
+				return (this.pos.dist(createVector(mouseX, mouseY)) < NeuronRadius);
+			} //here it is without .viz because the function is inside .viz already
+
+
+		}
+	}
+}
+
 
 function moveToOriginalPos() {
 
