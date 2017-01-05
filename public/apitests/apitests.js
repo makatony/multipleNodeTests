@@ -5,11 +5,31 @@ $(function () {
 
 	$("<input>", { type: "text", val: 'Logitech', id: 'queryString' }).appendTo($('body'));
 	$("<input>", { type: "submit" }).bind("click", getNews).appendTo($('body'));
+	$("<p>", { id: "newsSource" }).appendTo($('body'));
+	$("<div>", { id: "newsResult" }).appendTo($('body'));
+	
+	$("<style type='text/css'> table{ border-collapse:collapse; } th, td { border: 1px solid ; } </style>").appendTo("head");
 
 })
 
 
-
+function createNewsTable(result) {
+	$('<table>', {id: "newsTable"}).append($('<tr>')
+			.append($('<th>',{text:"News title"}))
+			.append($('<th>',{text:"Sentiment"}))
+			.append($('<th>',{text:"Confidence"}))
+		).appendTo($('body'))
+		
+	for (var i = 0; i < result.news.length; i++) {
+		var title = result.news[i].source.enriched.url.title;
+		var sentiment = result.news[i].sentiment;
+		$('#newsTable').append($('<tr>')
+			.append($('<td>',{text:title}))
+			.append($('<td>',{text:sentiment.top_class}))
+			.append($('<td>',{text: (function () { var a = ""; sentiment.classes.forEach( function (elt) { if (elt.class_name == sentiment.top_class) a = elt.confidence }  ); return a })() }))
+		)
+	}
+}
 
 
 // ######################
@@ -23,9 +43,11 @@ $.get("/getSocketUrl", function (dat) {
 	socket = io.connect(url);
 	
 	socket.on("getNewsResult", function (data) { 
-		result = data;
-		console.log(JSON.stringify(result,null,4));
-		$("<p>",{ text:JSON.stringify(result,null,4)}).appendTo($('body'))
+		result = data.result;
+		$('#newsSource').text("Source of news result: "+result.sourceFile);
+		createNewsTable(result);
+		// console.log(JSON.stringify(result,null,4));
+		// $("<p>",{ text:JSON.stringify(result,null,4)}).appendTo($('body'))
 	});
 	
 });
