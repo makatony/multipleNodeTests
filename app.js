@@ -26,10 +26,9 @@ var appEnv = cfenv.getAppEnv();
 
 // start server on the specified port and binding host
 var server = app.listen(appEnv.port, '0.0.0.0', function () {
-	// print a message when the server starts listening
-	console.log("server starting on " + appEnv.url);
-});
-
+		// print a message when the server starts listening
+		console.log("server starting on " + appEnv.url);
+	});
 
 // ######################
 // #### SOCKETS: I/O ####
@@ -38,25 +37,19 @@ var server = app.listen(appEnv.port, '0.0.0.0', function () {
 var socket = require('socket.io');
 var io = socket(server);
 
-
 io.sockets.on('connection', newConnection); //event listener for a connection
 
-function newConnection (client) { //insert here all functions for a connection
-	console.log("new client connected: " +client.id);
+function newConnection(client) { //insert here all functions for a connection
+	console.log("new client connected: " + client.id);
 	client.on("getNews", getNews);
 }
-
-
-
 
 // #####################
 // #### ALCHEMY API ####
 // #####################
 
-
-
-
-var backupNewsFromFile = require("./alchemyNewsLogitech.json");
+var localFile = "./alchemyNewsFortLauderdale.json";
+var backupNewsFromFile = require(localFile);
 
 var AlchemyDataNewsV1 = require('watson-developer-cloud/alchemy-data-news/v1');
 var newsResult = [];
@@ -66,70 +59,84 @@ var alchemy_data_news = new AlchemyDataNewsV1({
 	});
 
 var paramsAlch = {
-	start: 'now-10d'
-	,end: 'now'
-	,count: 10
-	,return: 'enriched.url.title,enriched.url.author,enriched.url.text'
-	,outputMode: 'json'
-	,'q.enriched.url.enrichedTitle.keywords.keyword.text': 'IBM'
+	start: 'now-10d',
+	end: 'now',
+	count: 10,
+	return : 'enriched.url.title,enriched.url.author,enriched.url.text',
+	outputMode: 'json',
+	'q.enriched.url.enrichedTitle.keywords.keyword.text': 'IBM'
 };
 
 var getNews = function (data) {
 	if (data.queryString.length > 0) {
 		// Adds the query string and the client ID to the request parameters
 		Object.assign(paramsAlch, {
-			'q.enriched.url.enrichedTitle.keywords.keyword.text': data.queryString
-			,clientID: this.client.id	//since getNews is called in the socket, it gets the context of the socket and this.client.id is passed
+			'q.enriched.url.enrichedTitle.keywords.keyword.text': data.queryString,
+			clientID: this.client.id //since getNews is called in the socket, it gets the context of the socket and this.client.id is passed
 		});
 
-		alchemy_data_news.getNews(paramsAlch, sendNewsResult);
+		alchemy_data_news.getNews(paramsAlch, sendNewsResult); //forcing alchemy API
+		// sendNewsResult(null, backupNewsFromFile); //forcing to get from local file
 	}
 }
 
 var sendNewsResult = function (err, news) {
 	var result;
-	if (err) { console.log('error:', err); result = err; }
-	else { 
-		// console.log(JSON.stringify(news, null, 2)); 
-		result = news; 
+	if (err) {
+		console.log('error:', err);
+		result = err;
+	} else {
+		// console.log(JSON.stringify(news, null, 2));
+		result = news;
 	}
-	
+
 	//send the data back to the caller
 	var sourceFile = "";
 	if (result.status == "OK") sourceFile = "watson";
-	else sourceFile = "localFile";
-	
-	
+	else sourceFile = "localFile ("+localFile+") due to daily-transaction-limit-exceeded";
+	console.log("using " + sourceFile + " as source.");
+
 	if (result.status != "OK") { //error case
 		if (result.statusInfo == "daily-transaction-limit-exceeded") {
-			result = backupNewsFromFile.result;
-		}
-		else io.sockets.connected[paramsAlch.clientID].emit("getNewsResult",{ result: result } );
+			var newResult = backupNewsFromFile;
+			newResult.originalResponse = result;
+			result = newResult;
+		} else
+			io.sockets.connected[paramsAlch.clientID].emit("getNewsResult", { result: result });
 	}
 	if (result.status == "OK") {
-		console.log("successfully fetched news for client id "+paramsAlch.clientID);
-		news = result.docs;
-		newsResult.push({clientID: paramsAlch.clientID, countArrivedNews:0, sourceFile: sourceFile, news: news }); //adds a new object in news result for this client ID in global array. news sentiment will be filled here
+		console.log("successfully fetched news for client id " + paramsAlch.clientID);
+		news = result.result.docs;
+		newsResult.push({
+			clientID: paramsAlch.clientID,
+			countArrivedNews: 0,
+			sourceFile: sourceFile,
+			news: news
+		}); //adds a new object in news result for this client ID in global array. news sentiment will be filled here
 		debugger;
 		for (var i = 0; i < news.length; i++) {
 			var textToClassify = news[i].source.enriched.url.title;
-			classify(textToClassify,classifiers[0].classifier_id,paramsAlch.clientID,classifyNewsCallback);
+			news[i].afinn = 0;
+			news[i].afinn = afinnClassify(textToClassify);
+			classify(textToClassify, classifiers[0].classifier_id, paramsAlch.clientID, classifyNewsCallback);
 		}
 	}
+	
+	io.sockets.connected[paramsAlch.clientID].emit("getRawNews", result);
 }
 
-var classifyNewsCallback = function (response,cID) {
+var classifyNewsCallback = function (response, cID) {
 	var clientIDfound = false;
 	var newsFound = false;
 	var foundIndex = -1;
-	for (var r = newsResult.length-1; r >= 0; r--) {
+	for (var r = newsResult.length - 1; r >= 0; r--) {
 		if (newsResult[r].clientID == cID) {
 			newsResult[r].countArrivedNews = newsResult[r].countArrivedNews + 1;
 			for (i = 0; i < newsResult[r].news.length; i++) {
 				if (newsResult[r].news[i].source.enriched.url.title == response.text) {
 					newsResult[r].news[i].sentiment = response;
 					newsFound = true;
-					i = newsResult[r].news.length; //break;
+					// i = newsResult[r].news.length; //break; // if this is enabled, duplicates titles in result wont work
 				}
 			}
 			clientIDfound = true;
@@ -137,28 +144,84 @@ var classifyNewsCallback = function (response,cID) {
 			r = 0; //break
 		}
 	}
-	if (clientIDfound == false) { console.log ("client ID "+cID+" not found in newsResult array"); console.log(newsResult); }
-	else if (newsFound == false) console.log ("client ID "+cID+" found in newsResult array but Title cannot be found in news array");
-	else console.log ("client ID "+cID+" found in newsResult array");
-	
+	if (clientIDfound == false) {
+		console.log("client ID " + cID + " not found in newsResult array");
+		console.log(newsResult);
+	} else if (newsFound == false)
+		console.log("client ID " + cID + " found in newsResult array but Title cannot be found in news array");
+	else
+		console.log("client ID " + cID + " found in newsResult array");
+
 	if ((clientIDfound) && (newsFound)) {
 		console.log("one more news sentiment found for client ID " + cID + ": " + response.top_class + " / " + response.text);
 		if (newsResult[foundIndex].news.length == newsResult[foundIndex].countArrivedNews) {
 			console.log("arrived at end of news for client id " + cID);
-			io.sockets.connected[cID].emit("getNewsResult", { result: newsResult[foundIndex] });
+			io.sockets.connected[cID].emit("getNewsResult", {result: newsResult[foundIndex]});
 		}
 		// console.log(JSON.stringify(response, null, 2));
 	}
 }
 
 // this is the only way i found to tell the client the website URL without PHP
-app.get("/getSocketUrl", function(req, res){
-    res.json({ url: appEnv.url });
+app.get("/getSocketUrl", function (req, res) {
+	res.json({
+		url: appEnv.url
+	});
 });
 
+// ##############################
+// #### AFINN classification ####
+// ##############################
 
+var afinnClassify = function (text) {
+	var text_a = text.split(" ");
+	var score = 0;
+	var wordScore = [];
+	for (var i = 0; i < text_a.length; i++) {
+		testWord = text_a[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+		thisScore = parseInt(getAfinnScoreWord(testWord));
+		score = score + thisScore;
+		wordScore.push({
+			word: testWord,
+			score: thisScore
+		})
+	}
+	return {
+		totalScore: score,
+		wordScore: wordScore
+	};
 
+}
 
+// var afinn = require("./AFINN-111.txt");
+// console.log(afinn);
+
+var afinn111 = [];
+var csv = require("fast-csv");
+var fs = require('fs');
+
+fs.createReadStream("./AFINN-111.txt")
+.pipe(csv())
+.on("data", function (data) {
+	var data = data[0].split('\t');
+	afinn111.push({
+		word: data[0],
+		score: data[1]
+	});
+	// if (data[0].indexOf(" ") > 0) console.log(data[0]); // shows the compound words
+})
+.on("end", function () {
+});
+
+var getAfinnScoreWord = function (word) {
+	for (var i = 0; i < afinn111.length; i++) {
+		if (afinn111[i].word == word) {
+			// console.log(word+" = "+afinn111[i].word+" = "+afinn111[i].score);
+			return afinn111[i].score
+		}
+	}
+	return 0;
+}
 
 // ##########################
 // #### NaturalLangCLass ####
@@ -166,64 +229,64 @@ app.get("/getSocketUrl", function(req, res){
 
 
 var watson = require('watson-developer-cloud');
-var fs     = require('fs');
+var fs = require('fs');
 var textToClassify = "";
 
 var classifiers = [];
 var classifiedText = [];
 
-
 var natural_language_classifier = watson.natural_language_classifier({
-  username: process.env.nlcUserName,
-  password: process.env.nlcPass,
-  version: 'v1'
-});
+		username: process.env.nlcUserName,
+		password: process.env.nlcPass,
+		version: 'v1'
+	});
 
 var paramsNLC = {
-  language: 'en',
-  name: 'makatonyNLCservice',
-  training_data: fs.createReadStream('./training/NLCtrainingData.csv')
+	language: 'en',
+	name: 'makatonyNLCservice',
+	training_data: fs.createReadStream('./training/NLCtrainingData.csv')
 };
 
 var trainClassifier = function () {
-	natural_language_classifier.create(paramsNLC, function(err, response) {
-	  if (err)
-		console.log(err);
-	  else
-		console.log(JSON.stringify(response, null, 2));
+	natural_language_classifier.create(paramsNLC, function (err, response) {
+		if (err)
+			console.log(err);
+		else
+			console.log(JSON.stringify(response, null, 2));
 	});
 }
 
 var listClassifier = function (callback) {
 	natural_language_classifier.list({},
-		function(err, response) {
+		function (err, response) {
 		if (err)
 			console.log('error:', err);
-		  else {
+		else {
 			// console.log(JSON.stringify(response, null, 2));
 			classifiers = response.classifiers;
-			callback.call(this,response);
-		  }
-	});
-}
-var listCallback = function () {
-	console.log("first classifier: "+classifiers[0].classifier_id)
-	classifierStatus(classifiers[0].classifier_id,0,statusCallback);
-};
-
-var classifierStatus = function (classifierID,classifierIndex,callback) {
-	natural_language_classifier.status({
-	  classifier_id: classifierID },
-	  function(err, response) {
-		if (err)
-		  console.log('error:', err);
-		else {
-			classifiers[classifierIndex] = response;
-			callback.call(null,response,classifierIndex);
+			callback.call(this, response);
 		}
 	});
 }
-var statusCallback = function (response,classifierIndex) {
+var listCallback = function () {
+	console.log("first classifier: " + classifiers[0].classifier_id)
+	classifierStatus(classifiers[0].classifier_id, 0, statusCallback);
+};
+
+var classifierStatus = function (classifierID, classifierIndex, callback) {
+	natural_language_classifier.status({
+		classifier_id: classifierID
+	},
+		function (err, response) {
+		if (err)
+			console.log('error:', err);
+		else {
+			classifiers[classifierIndex] = response;
+			callback.call(null, response, classifierIndex);
+		}
+	});
+}
+var statusCallback = function (response, classifierIndex) {
 	// console.log(classifiers);
 	if (classifiers[classifierIndex].status == "Available") {
 		console.log(classifiers[classifierIndex].classifier_id + " is available")
@@ -232,86 +295,75 @@ var statusCallback = function (response,classifierIndex) {
 	// console.log(JSON.stringify(response, null, 2));
 }
 
-
 var removeClassifier = function (classifierID) {
 	natural_language_classifier.remove({
-	  classifier_id: classifierID },
-	  function(err, response) {
+		classifier_id: classifierID
+	},
+		function (err, response) {
 		if (err)
-		  console.log('error:', err);
+			console.log('error:', err);
 		else
-		  console.log(JSON.stringify(response, null, 2));
+			console.log(JSON.stringify(response, null, 2));
 	});
 }
 
-var classify = function (text,classifierID,cID,callback) {
+var classify = function (text, classifierID, cID, callback) {
 	natural_language_classifier.classify({
-	  text: text,
-	  classifier_id: classifierID },
-	  function(err, response) {
+		text: text,
+		classifier_id: classifierID
+	},
+		function (err, response) {
 		if (err)
-		  console.log('error:', err);
+			console.log('error:', err);
 		else
-			callback.call(null,response,cID);
+			callback.call(null, response, cID);
 	});
 }
-var classifyCallback = function (response,cID) {
-	classifiedText.push(Object.assign(response,{clientID: cID}));
+var classifyCallback = function (response, cID) {
+	classifiedText.push(Object.assign(response, {
+			clientID: cID
+		}));
 	console.log(classifiedText[0]);
 	// console.log(JSON.stringify(response, null, 2));
 }
 
-
-
 listClassifier(listCallback);
 
+// nlc.removeClassifier("ff18a8x156-nlc-1099");
 
 
- // nlc.removeClassifier("ff18a8x156-nlc-1099");
-
-
-
-
-
-
-//first training response: 
+//first training response:
 /*
 {
-  "classifier_id": "ff18c7x157-nlc-2045",
-  "name": "makatonyNLCservice",
-  "language": "en",
-  "created": "2017-01-04T19:39:16.009Z",
-  "url": "https://gateway.watsonplatform.net/natural-language-classifier/api/v1/classifiers/ff18c7x157-nlc-2045",
-  "status": "Training",
-  "status_description": "The classifier instance is in its training phase, not yet ready to accept classify requests"
+"classifier_id": "ff18c7x157-nlc-2045",
+"name": "makatonyNLCservice",
+"language": "en",
+"created": "2017-01-04T19:39:16.009Z",
+"url": "https://gateway.watsonplatform.net/natural-language-classifier/api/v1/classifiers/ff18c7x157-nlc-2045",
+"status": "Training",
+"status_description": "The classifier instance is in its training phase, not yet ready to accept classify requests"
 }
 
-*/
+ */
 
 //first listclassifier response:
 /*
 {
-  "classifiers": [
-    {
-      "classifier_id": "ff18c7x157-nlc-2045",
-      "url": "https://gateway.watsonplatform.net/natural-language-classifier/api/v1/classifiers/ff18c7x157-nlc-2045",
-      "name": "makatonyNLCservice",
-      "language": "en",
-      "created": "2017-01-04T19:39:16.009Z"
-    }
-  ]
+"classifiers": [
+{
+"classifier_id": "ff18c7x157-nlc-2045",
+"url": "https://gateway.watsonplatform.net/natural-language-classifier/api/v1/classifiers/ff18c7x157-nlc-2045",
+"name": "makatonyNLCservice",
+"language": "en",
+"created": "2017-01-04T19:39:16.009Z"
+}
+]
 }
 
 
-*/
-
-
-
+ */
 
 // #######################
 // #### MISCELLANEOUS ####
 // #######################
-
-
-
 

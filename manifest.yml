@@ -8,5 +8,5 @@ applications:
   disk_quota: 1024M
   services:
   - AlchemyAPI-g9
-  - Natural Language Classifier-ii
+  - makatonyNLCservice
   - availability-monitoring-auto
