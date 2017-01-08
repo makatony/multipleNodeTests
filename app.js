@@ -75,8 +75,8 @@ var getNews = function (data) {
 			clientID: this.client.id //since getNews is called in the socket, it gets the context of the socket and this.client.id is passed
 		});
 
-		alchemy_data_news.getNews(paramsAlch, sendNewsResult); //forcing alchemy API
-		// sendNewsResult(null, backupNewsFromFile); //forcing to get from local file
+		// alchemy_data_news.getNews(paramsAlch, sendNewsResult); //forcing alchemy API
+		sendNewsResult(null, backupNewsFromFile); //forcing to get from local file
 	}
 }
 
@@ -169,22 +169,76 @@ app.get("/getSocketUrl", function (req, res) {
 	});
 });
 
-// ##############################
-// #### AFINN classification ####
-// ##############################
+
+// #######################
+// #### WORD STEMMING ####
+// #######################
+
+var natural = require('natural');
+
+var StemmWords = function (text) {
+    var output = text.split(/\W+/);
+    output = output.map( function (w) { return stemWord(w); })
+	output = output.join(" ");
+	return output;
+}
+
+var stemWord = function (w) {
+	return natural.PorterStemmer.stem(w);
+}
+
+
+// ###########################
+// #### STOP WORD REMOVAL ####
+// ###########################
+
+var stopwords = require('stopwords').english;
+
+var removeStopwords = function (text) {
+    var output = text.split(/\W+/);
+    output = output.filter( function (w) { return stopwords.indexOf(w.toLowerCase()) < 0 });
+	output = output.join(" ");
+	return output;
+}
+
+
+
+// #######################
+// #### AFINN SCORING ####
+// #######################
 
 var afinnClassify = function (text) {
+	text = removeStopwords(text);
 	var text_a = text.split(" ");
 	var score = 0;
 	var wordScore = [];
 	for (var i = 0; i < text_a.length; i++) {
-		testWord = text_a[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
-		thisScore = parseInt(getAfinnScoreWord(testWord));
-		score = score + thisScore;
-		wordScore.push({
-			word: testWord,
-			score: thisScore
-		})
+		var testWord = text_a[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+		testWord = testWord.toLowerCase();
+		var stemWordUsed = false;
+		var thisScore = 0;
+		var thisScoreObj = {
+			word: "",
+			score: ""
+		};
+		
+		//if the unstemmed word is in afinn, take that score. or else take the score of the stemmed word (mostly zero)
+		// if (getAfinnScoreWord(stemWord(testWord)) != 0) {
+		var unstemmedScore = getAfinnScoreWord(testWord);
+		if (unstemmedScore != 0) { thisScore = unstemmedScore; }
+		else { thisScore = getAfinnScoreWord(stemWord(testWord)); stemWordUsed = true; }
+		
+		// var consoleLog = testWord+" / "+thisScore;
+		// consoleLog += " | Stem: "+stemWord(testWord) + " / "+getAfinnScoreWord(stemWord(testWord));
+		// consoleLog += " | output: "+thisScore;
+		// console.log(consoleLog);
+		
+		
+		thisScoreObj.score = parseInt(thisScore);
+		thisScoreObj.word = testWord;
+		if ((stemWordUsed) && (parseInt(thisScore) != 0)) thisScoreObj.stemWord = stemWord(testWord);
+		score = score + parseInt(thisScore);
+		wordScore.push(thisScoreObj);
 	}
 	return {
 		totalScore: score,
@@ -197,6 +251,7 @@ var afinnClassify = function (text) {
 // console.log(afinn);
 
 var afinn111 = [];
+var afinn111stemmed = [];
 var csv = require("fast-csv");
 var fs = require('fs');
 
@@ -204,24 +259,96 @@ fs.createReadStream("./AFINN-111.txt")
 .pipe(csv())
 .on("data", function (data) {
 	var data = data[0].split('\t');
-	afinn111.push({
+	//unstemmed afinn111
+	afinn111.push({ 
 		word: data[0],
+		stemmedWord: stemWord(data[0]),
 		score: data[1]
 	});
+	
+	//stemmed afinn111. if we find that we already gave a score to a word with the same stem,
+	//then we change both unstemmed words to have the stem be the same as the unstemmed word
+	//and we add a new word just for the stem
+	var testing = getAfinnScoreObj(stemWord(data[0]),isStemmed=true)
+	if ((testing.score != 0) && (Math.abs(data[1] - testing.score) > 0)) { //checking for 2 words that have drastically different scores when stemmed
+		// console.log("existing word: "+stemWord(data[0])+" | New score: "+data[1]+"("+data[0]+") | existing score: "+testing.score+"("+testing.word+")");
+		
+		//we now have a stem with an avg score and two new unstemmed words to add to afinn. we need to correct the two words and add a word for the stem
+		//replaces the .stemmedWord (e.g. "stun" for "stunned") with unstemmed word "stunned" because there is a differentiation
+		var newObj = Object.assign(testing,{stemmedWord: testing.word});
+		setAfinnWord(testing.word,newObj);
+		
+		newObj = Object.assign(getAfinnScoreObj(data[0]),{stemmedWord: data[0]});
+		setAfinnWord(data[0],newObj);
+		
+		//add a new entry just for the stem
+		var stemScore = Math.round((parseInt(data[1])+parseInt(testing.score))/2); //average of both for the stem
+		afinn111.push({ 
+			word: stemWord(data[0]),
+			stemmedWord: stemWord(data[0]),
+			score: stemScore
+		});
+		
+	}
 	// if (data[0].indexOf(" ") > 0) console.log(data[0]); // shows the compound words
 })
+
 .on("end", function () {
+	// var origText = "FORT LAUDERDALE, Fla., Jan 6 An Iraq war veteran took a gun out of his checked luggage and opened fire in a crowded baggage claim area at Fort Lauderdale's airport on Friday, killing five people, months after he showed up at an FBI office behaving erratically. CHICAGO, Jan 6 The United States has reached an agreement that is expected to open the door for its first-ever exports of shell eggs to South Korea, as the North Asian country labors through its worst outbreak of bird flu in history, U.S. government and industry officials said on Friday.  lagged lag do it."
+	// origText += " Obtained by ABC News(FORT LAUDERDALE, Fla.) -- He is the alleged perpetrator of a shooting spree that left five people dead and more injured in the Fort Lauderdale airport Friday afternoon. But Esteban Santiago remains a mystery for federal authorities who are trying to piece together just what led a 26-year-old Army veteran with an intense gaze to go on a murderous rampage";
+	// var text = removeStopwords(origText);
+	// console.log("afinn classify output: "+afinnClassify(text));
+	// console.log(origText);
+	// console.log(text);
+	
+	
+	// console.log(afinn111);
+	// console.log("------");
+	
+	//afinn testing
+	// console.log("lag ")
+	// console.log(getAfinnScoreObj("lag"))
+	// console.log("lagged ")
+	// console.log(getAfinnScoreObj("lagged"))
+	// console.log("lagging ")
+	// console.log(getAfinnScoreObj("lagging"))
+	// console.log("lags ")
+	// console.log(getAfinnScoreObj("lags"))
+	
 });
 
-var getAfinnScoreWord = function (word) {
-	for (var i = 0; i < afinn111.length; i++) {
-		if (afinn111[i].word == word) {
+
+var setAfinnWord = function (word,obj,isStemmed) { // if isStemmed = true, look for the input word in the .stemmedWord property. otherwise in .word property
+	var property = (isStemmed?"stemmedWord":"word");
+	var afinnObj = afinn111;
+	for (var i = 0; i < afinnObj.length; i++) {
+		if (afinnObj[i][property] == word) {
+			afinnObj[i] = obj;
+		}
+	}
+}
+var getAfinnScoreWord = function (word,isStemmed) { // if isStemmed = true, look for the input word in the .stemmedWord property. otherwise in .word property
+	var property = (isStemmed?"stemmedWord":"word");
+	var afinnObj = afinn111;
+	for (var i = 0; i < afinnObj.length; i++) {
+		if (afinnObj[i][property] == word) {
 			// console.log(word+" = "+afinn111[i].word+" = "+afinn111[i].score);
-			return afinn111[i].score
+			return afinnObj[i].score
 		}
 	}
 	return 0;
 }
+var getAfinnScoreObj = function (word,isStemmed) { // if isStemmed = true, look for the input word in the .stemmedWord property. otherwise in .word property
+	var property = (isStemmed?"stemmedWord":"word");
+	var afinnObj = afinn111;
+	for (var i = 0; i < afinnObj.length; i++) {
+		if (afinnObj[i][property] == word) {
+			return afinnObj[i]
+		}
+	}
+	return 0;
+}
+
 
 // ##########################
 // #### NaturalLangCLass ####
@@ -366,4 +493,5 @@ listClassifier(listCallback);
 // #######################
 // #### MISCELLANEOUS ####
 // #######################
+
 

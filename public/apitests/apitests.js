@@ -121,11 +121,11 @@ var afinnColorText = function (text, wordScores) {
 	var text_a = text.split(' ');
 	var output = text;
 	for (var i = 0; i < text_a.length; i++) {
-		var testWord = text_a[i].replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "");
+		var testWord = text_a[i];
 		var newTestWord = testWord;
 		
 		for (j = 0; j < wordScores.length; j++) {
-			if (wordScores[j].word == testWord) {
+			if (wordScores[j].word == testWord.toLowerCase().replace(/[.,\/#!'$%\^&\*;:{}=\-_`~()]/g, "")) {
 				if (wordScores[j].score > 0) newTestWord = $('<a>').text(testWord).css("background-color","#CAECCF").clone().wrap('<p>').parent().html();;
 				if (wordScores[j].score < 0) newTestWord = $('<a>').text(testWord).css("background-color","#DDB0A0").clone().wrap('<p>').parent().html();;
 			}
