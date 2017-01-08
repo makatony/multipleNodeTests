@@ -75,8 +75,8 @@ var getNews = function (data) {
 			clientID: this.client.id //since getNews is called in the socket, it gets the context of the socket and this.client.id is passed
 		});
 
-		// alchemy_data_news.getNews(paramsAlch, sendNewsResult); //forcing alchemy API
-		sendNewsResult(null, backupNewsFromFile); //forcing to get from local file
+		alchemy_data_news.getNews(paramsAlch, sendNewsResult); //forcing alchemy API
+		// sendNewsResult(null, backupNewsFromFile); //forcing to get from local file
 	}
 }
 
@@ -293,7 +293,7 @@ fs.createReadStream("./AFINN-111.txt")
 	// if (data[0].indexOf(" ") > 0) console.log(data[0]); // shows the compound words
 })
 
-.on("end", function () {
+.on("end", function () {	
 	// var origText = "FORT LAUDERDALE, Fla., Jan 6 An Iraq war veteran took a gun out of his checked luggage and opened fire in a crowded baggage claim area at Fort Lauderdale's airport on Friday, killing five people, months after he showed up at an FBI office behaving erratically. CHICAGO, Jan 6 The United States has reached an agreement that is expected to open the door for its first-ever exports of shell eggs to South Korea, as the North Asian country labors through its worst outbreak of bird flu in history, U.S. government and industry officials said on Friday.  lagged lag do it."
 	// origText += " Obtained by ABC News(FORT LAUDERDALE, Fla.) -- He is the alleged perpetrator of a shooting spree that left five people dead and more injured in the Fort Lauderdale airport Friday afternoon. But Esteban Santiago remains a mystery for federal authorities who are trying to piece together just what led a 26-year-old Army veteran with an intense gaze to go on a murderous rampage";
 	// var text = removeStopwords(origText);
