@@ -49,6 +49,8 @@ function newConnection(client) { //insert here all functions for a connection
 // #####################
 
 var localFile = "./alchemyNewsFortLauderdale.json";
+var nlcStatus = "";
+var alchemyStatus = "";
 var backupNewsFromFile = require(localFile);
 
 var AlchemyDataNewsV1 = require('watson-developer-cloud/alchemy-data-news/v1');
@@ -83,7 +85,7 @@ var getNews = function (data) {
 var sendNewsResult = function (err, news) {
 	var result;
 	if (err) {
-		console.log('error:', err);
+		console.log('error SendNewsResult:', err);
 		result = err;
 	} else {
 		// console.log(JSON.stringify(news, null, 2));
@@ -91,18 +93,21 @@ var sendNewsResult = function (err, news) {
 	}
 
 	//send the data back to the caller
-	var sourceFile = "";
-	if (result.status == "OK") sourceFile = "watson";
-	else sourceFile = "localFile ("+localFile+") due to daily-transaction-limit-exceeded";
-	console.log("using " + sourceFile + " as source.");
+	var sourceFileText = "";
+	if (result.status == "OK") sourceFileText = "watson";
+	else sourceFileText = "localFile ("+localFile+") due to errors";
+	console.log("using " + sourceFileText + " as source.");
 
 	if (result.status != "OK") { //error case
-		if (result.statusInfo == "daily-transaction-limit-exceeded") {
+	
+		//error handling of errors from watson
+		if ((result.statusInfo == "daily-transaction-limit-exceeded") || (result.errno == 'ENOENT') || (result.statusInfo == 'invalid-api-key')) {
 			var newResult = backupNewsFromFile;
 			newResult.originalResponse = result;
 			result = newResult;
-		} else
-			io.sockets.connected[paramsAlch.clientID].emit("getNewsResult", { result: result });
+		} 
+		else
+			io.sockets.connected[paramsAlch.clientID].emit("getNewsResult", { error: "there was some uncaught error, please check app.js", result: result });
 	}
 	if (result.status == "OK") {
 		console.log("successfully fetched news for client id " + paramsAlch.clientID);
@@ -110,18 +115,19 @@ var sendNewsResult = function (err, news) {
 		newsResult.push({
 			clientID: paramsAlch.clientID,
 			countArrivedNews: 0,
-			sourceFile: sourceFile,
-			news: news
+			sourceFileText: sourceFileText,
+			news: news,
+			nlcStatus: nlcStatus
 		}); //adds a new object in news result for this client ID in global array. news sentiment will be filled here
 		debugger;
 		for (var i = 0; i < news.length; i++) {
 			var textToClassify = news[i].source.enriched.url.title;
 			news[i].afinn = 0;
 			news[i].afinn = afinnClassify(textToClassify);
-			classify(textToClassify, classifiers[0].classifier_id, paramsAlch.clientID, classifyNewsCallback);
+			if (nlcStatus != "offline") classify(textToClassify, classifiers[0].classifier_id, paramsAlch.clientID, classifyNewsCallback);
 		}
 	}
-	
+	if (nlcStatus == "offline")	io.sockets.connected[paramsAlch.clientID].emit("getNewsResult", {result: newsResult[0]}); //if the NLC is not online, then the classifyNewsCallback is not going to be called, thus one has to emmit here manually
 	io.sockets.connected[paramsAlch.clientID].emit("getRawNews", result);
 }
 
@@ -386,9 +392,12 @@ var trainClassifier = function () {
 var listClassifier = function (callback) {
 	natural_language_classifier.list({},
 		function (err, response) {
-		if (err)
-			console.log('error:', err);
+		if (err) {
+			console.log('error NLC:', err);
+			nlcStatus = "offline";
+		}
 		else {
+			nlcStatus = "online";
 			// console.log(JSON.stringify(response, null, 2));
 			classifiers = response.classifiers;
 			callback.call(this, response);
@@ -406,7 +415,7 @@ var classifierStatus = function (classifierID, classifierIndex, callback) {
 	},
 		function (err, response) {
 		if (err)
-			console.log('error:', err);
+			console.log('error NLC StatusQuery:', err);
 		else {
 			classifiers[classifierIndex] = response;
 			callback.call(null, response, classifierIndex);
@@ -428,7 +437,7 @@ var removeClassifier = function (classifierID) {
 	},
 		function (err, response) {
 		if (err)
-			console.log('error:', err);
+			console.log('error NLC remove:', err);
 		else
 			console.log(JSON.stringify(response, null, 2));
 	});
@@ -441,7 +450,7 @@ var classify = function (text, classifierID, cID, callback) {
 	},
 		function (err, response) {
 		if (err)
-			console.log('error:', err);
+			console.log('error NLC classify:', err);
 		else
 			callback.call(null, response, cID);
 	});

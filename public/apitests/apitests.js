@@ -55,16 +55,20 @@ function createNewsTable(result) {
 		// title = title.replace(/(\w+)/ig, "<span class='afinnHover'>$1</span>");
 		title = $('<span>',{ class: 'afinnHover', text: title });
 
-		var NLCsentiment = result.news[i].sentiment;
-		var NLCsentimentConfidence = (function () {var a = ""; NLCsentiment.classes.forEach(function (elt) { if (elt.class_name == NLCsentiment.top_class) a = elt.confidence });	return a})();
-		NLCsentimentConfidence = Math.round(NLCsentimentConfidence * 100) / 100;
-
+		if (result.nlcStatus == "online") {
+			var NLCsentiment = result.news[i].sentiment;
+			var NLCsentimentConfidence = (function () {var a = ""; NLCsentiment.classes.forEach(function (elt) { if (elt.class_name == NLCsentiment.top_class) a = elt.confidence });	return a})();
+			NLCsentimentConfidence = Math.round(NLCsentimentConfidence * 100) / 100;
+			var nlcText = NLCsentiment.top_class + " (" + NLCsentimentConfidence + ")";
+		}
+		else var nlcText = "WATSON NLC ERR";
+		
 		var afinn = result.news[i].afinn;
 		var afinnSentiment = (afinn.totalScore < 0 ? "negative" : (afinn.totalScore > 0 ? "positive" : "neutral"))
 
 		$('#newsTable').append($('<tr>', {newsId: i})
 			.append($('<td>', {html: title}))
-			.append($('<td>', {text: NLCsentiment.top_class + " (" + NLCsentimentConfidence + ")"}))
+			.append($('<td>', {text: nlcText}))
 			.append($('<td>', {text: afinnSentiment + " (" + afinn.totalScore + ")"	})))
 	}
 	
@@ -143,7 +147,7 @@ $.get("/getSocketUrl", function (dat) {
 
 	socket.on("getNewsResult", function (data) {
 		result = data.result;
-		$('#newsSource').text("Source of news result: " + result.sourceFile);
+		$('#newsSource').text("Source of news result: " + result.sourceFileText);
 		console.log("getNewsResult");
 		console.log(data);
 		storeSummaryInObj(data);
